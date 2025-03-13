@@ -68,9 +68,48 @@
 #define HMC5883L_REG_IDENT_B          (0x0B)
 #define HMC5883L_REG_IDENT_C          (0x0C)
 
-/*
-					MPU6050 declaration
-*/
+#define MS5611_ADDR 0x77
+
+#define ADC_READ      0x00
+
+#define CONVERSION_OSR_256  1
+#define CONVERSION_OSR_512  2
+#define CONVERSION_OSR_1024 3
+#define CONVERSION_OSR_2048 5
+#define CONVERSION_OSR_4096 10
+
+#define CMD_RESET 0x1E
+#define CMD_PROM_C0 0xA0
+#define CMD_PROM_C1 0xA2
+#define CMD_PROM_C2 0xA4
+#define CMD_PROM_C3 0xA6
+#define CMD_PROM_C4 0xA8
+#define CMD_PROM_C5 0xAA
+#define CMD_PROM_C6 0xAC
+#define CMD_PROM_C7 0xAE
+
+#define PRESSURE_OSR_256 0x40
+#define PRESSURE_OSR_512 0x42
+#define PRESSURE_OSR_1024 0x44
+#define PRESSURE_OSR_2048 0x46
+#define PRESSURE_OSR_4096 0x48
+
+#define TEMP_OSR_256 0x50
+#define TEMP_OSR_512 0x52
+#define TEMP_OSR_1024 0x54
+#define TEMP_OSR_2048 0x56
+#define TEMP_OSR_4096 0x58
+
+#define PMAX 1200
+#define PMIN 10
+
+#define TMAX 85
+#define TMIN -40
+
+
+
+
+
 
 typedef struct _MPU6050_t
 {
@@ -98,7 +137,6 @@ typedef struct _MPU6050_t
 
     float Temperature;
 
-    float Heading;
 
     int16_t Mag_X_RAW;
     int16_t Mag_Y_RAW;
@@ -123,10 +161,9 @@ typedef struct _MPU6050_t
     double KalmanAngleX; // roll angle
     double KalmanAngleY; // pitch angle
 
-    double AngleZ; // yaw angle
 }MPU6050_t;
 
-typedef struct
+typedef struct _Kalman_t
 {
     double Q_angle;
     double Q_bias;
@@ -136,6 +173,25 @@ typedef struct
     double P[2][2];
 } Kalman_t;
 
+typedef struct _MS5611{
+    uint16_t C[8];
+    uint32_t DigitalPressure_D1;
+    uint32_t DigitalTemperature_D2;
+    int32_t dT;
+    int32_t TEMP;
+    int64_t OFF;
+    int64_t SENS;
+    int32_t P;
+
+    float alt;
+    
+
+    int OFF2;
+    int T2;
+    int SENS2;
+
+}MS5611_t;
+
 uint8_t MPU6050_Init(uint8_t Gyro_FS, uint8_t ACC_FS);
 int MPU6050_Bypass();
 int MPU6050_Master(uint8_t clk_div);
@@ -144,7 +200,20 @@ void MPU6050_Read_All_Raw(MPU6050_t *DataStruct);
 double Kalman_getAngle(Kalman_t *Kalman, double newAngle, double newRate, double dt);
 void MPU6050_Read_All_Kalman(MPU6050_t *DataStruct);
 int HMC5883L_Setup(int Mag_Range);
-void show(MPU6050_t *data);
+int MS5611_Init();
+int MS5611_Reset();
+void Temp_Com(MS5611_t *DataStruct);
+int MS5611_ReadProm(MS5611_t *DataStruct);
+int MS5611_RequestPressure(int osr);
+int MS5611_RequestTemperature(int osr);
+int MS5611_ReadPressure(MS5611_t *DataStruct);
+int MS5611_ReadTemperature(MS5611_t *DataStruct);
+int MS5611_CalculatePressure(MS5611_t *DataStruct);
+int MS5611_CalculateTemperature(MS5611_t *DataStruct);
+void print_MS5611(MS5611_t *data);
+void print_MPU6050(MPU6050_t *data);
+
+
 
 
 

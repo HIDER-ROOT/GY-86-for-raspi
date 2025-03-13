@@ -4,9 +4,11 @@
 #include <stdint.h>
 #include <math.h>
 #include <stdio.h>
+#include <unistd.h>
 
 
 int fd;
+int fd_MS;
 int fd_HMC;
 uint32_t timer;
 
@@ -23,8 +25,9 @@ Kalman_t KalmanY = {
 };
 
 uint8_t MPU6050_rx;
-uint8_t MPU6050_rx_buf[20];
 uint8_t MPU6050_tx;
+uint8_t MS5611_rx;
+uint8_t MS5611_tx;
 float MPU6050_Gyro_LSB;
 float MPU6050_Acc_LSB;
 float Mag_FS;
@@ -112,8 +115,7 @@ uint8_t MPU6050_Init(uint8_t Gyro_FS, uint8_t Acc_FS){
 	return 1;
 }
 
-int MPU6050_Bypass()
-{
+int MPU6050_Bypass(){
 	MPU6050_tx = 0b00000000; // Precondition to enable Bypass Mode
 	wiringPiI2CWriteReg8(fd, USER_CTRL_REG, MPU6050_tx);
 	delay(10);
@@ -126,7 +128,6 @@ int MPU6050_Bypass()
 
 int MPU6050_Master(uint8_t clk_div) // range of clk_div from 0 to 15
 {
-
 	MPU6050_tx = 0x00; // Disable Bypass ModeINT_PIN_CFG
 	wiringPiI2CWriteReg8(fd, INT_PIN_CFG, MPU6050_tx);
 	delay(10);
@@ -147,9 +148,7 @@ int MPU6050_Master(uint8_t clk_div) // range of clk_div from 0 to 15
 	return 0;
 }
 
-int MPU6050_Slave_Read()
-{
-
+int MPU6050_Slave_Read(){
 	MPU6050_tx = HMC5883L_ADDRESS | 0x80; //Access Slave into read mode
 	wiringPiI2CWriteReg8(fd, I2C_SLV0_ADDR, MPU6050_tx);
 	delay(10);
@@ -217,8 +216,7 @@ int HMC5883L_Setup(int Mag_Range){
 	return 0;
 }
 
-void MPU6050_Read_All_Raw(MPU6050_t *DataStruct)
-{
+void MPU6050_Read_All_Raw(MPU6050_t *DataStruct){
 	DataStruct->Accel_X_RAW = (int16_t)((wiringPiI2CReadReg8(fd, ACCEL_XOUT_H_REG) << 8) | wiringPiI2CReadReg8(fd, ACCEL_XOUT_L_REG));
 	DataStruct->Accel_Y_RAW = (int16_t)((wiringPiI2CReadReg8(fd, ACCEL_YOUT_H_REG) << 8) | wiringPiI2CReadReg8(fd, ACCEL_YOUT_L_REG));
 	DataStruct->Accel_Z_RAW = (int16_t)((wiringPiI2CReadReg8(fd, ACCEL_ZOUT_H_REG) << 8) | wiringPiI2CReadReg8(fd, ACCEL_ZOUT_L_REG));
@@ -314,8 +312,7 @@ void MPU6050_Read_All_Kalman(MPU6050_t *DataStruct){
     DataStruct->KalmanAngleX = Kalman_getAngle(&KalmanX, roll, DataStruct->Gx, dt);
 }
 
-double Kalman_getAngle(Kalman_t *Kalman, double newAngle, double newRate, double dt)
-{
+double Kalman_getAngle(Kalman_t *Kalman, double newAngle, double newRate, double dt){
     double rate = newRate - Kalman->bias;
     Kalman->angle += dt * rate;
 
@@ -344,13 +341,209 @@ double Kalman_getAngle(Kalman_t *Kalman, double newAngle, double newRate, double
     return Kalman->angle;
 };
 
-void show(MPU6050_t *data){
-	printf("MPU6050 Sensor Data:\n");
-    printf("--------------------\n");
-    printf("Acceleration (RAW): X=%d, Y=%d, Z=%d\n", data->Accel_X_RAW, data->Accel_Y_RAW, data->Accel_Z_RAW);
-    printf("Temperature (RAW): %d\n", data->TEMP_RAW);
-    printf("Gyroscope (RAW): X=%d, Y=%d, Z=%d\n", data->Gyro_X_RAW, data->Gyro_Y_RAW, data->Gyro_Z_RAW);
-    printf("Magnetometer (RAW): X=%d, Y=%d, Z=%d\n", data->Mag_X_RAW, data->Mag_Y_RAW, data->Mag_Z_RAW);
-    printf("--------------------\n");
+void print_MS5611(MS5611_t *data) {
+    printf("MS5611 Sensor Data:\n");
+    for (int i = 0; i < 8; i++) {
+        printf("C[%d]: %u\n", i, data->C[i]);
+    }
+    printf("DigitalPressure_D1: %u\n", data->DigitalPressure_D1);
+    printf("DigitalTemperature_D2: %u\n", data->DigitalTemperature_D2);
+    printf("dT: %d\n", data->dT);
+    printf("OFF: %lld\n", data->OFF);
+    printf("SENS: %lld\n", data->SENS);
+    printf("P: %d\n", data->P);
+    printf("OFF2: %d\n", data->OFF2);
+    printf("T2: %d\n", data->T2);
+    printf("SENS2: %d\n", data->SENS2);
+    printf("TEMP: %d\n", data->TEMP);
+    printf("Altitude: %f\n", data->alt);
 }
+
+void print_MPU6050(MPU6050_t *data) {
+    printf("MPU6050 Sensor Data:\n");
+    printf("Accel_X_RAW: %d, Accel_Y_RAW: %d, Accel_Z_RAW: %d\n", data->Accel_X_RAW, data->Accel_Y_RAW, data->Accel_Z_RAW);
+    printf("Ax: %.2f, Ay: %.2f, Az: %.2f\n", data->Ax, data->Ay, data->Az);
+    printf("Gyro_X_RAW: %d, Gyro_Y_RAW: %d, Gyro_Z_RAW: %d\n", data->Gyro_X_RAW, data->Gyro_Y_RAW, data->Gyro_Z_RAW);
+    printf("TEMP_RAW: %d\n", data->TEMP_RAW);
+    printf("Gyro Offsets: X: %d, Y: %d, Z: %d\n", data->Gyro_X_Offset, data->Gyro_Y_Offset, data->Gyro_Z_Offset);
+    printf("Gx: %.2f, Gy: %.2f, Gz: %.2f\n", data->Gx, data->Gy, data->Gz);
+    printf("Temperature: %.2f\n", data->Temperature);
+    printf("Mag_X_RAW: %d, Mag_Y_RAW: %d, Mag_Z_RAW: %d\n", data->Mag_X_RAW, data->Mag_Y_RAW, data->Mag_Z_RAW);
+    printf("Mag Min: X: %d, Y: %d, Z: %d\n", data->Mag_X_Min, data->Mag_Y_Min, data->Mag_Z_Min);
+    printf("Mag Max: X: %d, Y: %d, Z: %d\n", data->Mag_X_Max, data->Mag_Y_Max, data->Mag_Z_Max);
+    printf("Mag Offsets: X: %d, Y: %d, Z: %d\n", data->Mag_X_Offset, data->Mag_Y_Offset, data->Mag_Z_Offset);
+    printf("Mx: %.2f, My: %.2f, Mz: %.2f\n", data->Mx, data->My, data->Mz);
+    printf("KalmanAngleX: %.2f, KalmanAngleY: %.2f\n", data->KalmanAngleX, data->KalmanAngleY);
+}
+
+int MS5611_Init(){
+	fd_MS = wiringPiI2CSetup(MS5611_ADDR);
+	if(fd_MS == -1){
+		return 1;
+	}
+	return 0;
+}
+
+void Temp_Com(MS5611_t *DataStruct){
+	if(DataStruct->TEMP > 2000){
+		DataStruct->T2 = 0;
+		DataStruct->OFF2 = 0;
+		DataStruct->SENS2 = 0;
+	}
+	else{
+		DataStruct->T2 = (DataStruct->dT * DataStruct->dT)>>31; // 2^31
+		if(DataStruct->TEMP < -1500){
+			DataStruct->OFF2 += 7 * (DataStruct->TEMP + 1500) * (DataStruct->TEMP + 1500);
+			DataStruct->SENS2 += ((11 * (DataStruct->TEMP + 1500) * (DataStruct->TEMP + 1500))>>1);
+		}
+		else{
+			DataStruct->OFF2 = 5 * (DataStruct->TEMP - 2000) * (DataStruct->TEMP - 2000) / 2;
+			DataStruct->SENS2 = 5 * (DataStruct->TEMP - 2000) * (DataStruct->TEMP - 2000) / 4;
+		}
+	}
+}
+
+int MS5611_Reset(){
+	MS5611_tx = CMD_RESET;
+	wiringPiI2CWriteReg8(fd_MS, MS5611_ADDR, MS5611_tx);
+	delay(10);
+	return 0;
+}
+
+int MS5611_ReadProm(MS5611_t *DataStruct){
+	DataStruct->C[0] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C0) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C0 + 1);
+	delay(10);
+
+	DataStruct->C[1] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C1) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C1 + 1);
+	delay(10);
+	
+	DataStruct->C[2] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C2) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C2 + 1);
+	delay(10);
+
+	DataStruct->C[3] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C3) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C3 + 1);
+	delay(10);
+
+	DataStruct->C[4] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C4) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C4 + 1);
+	delay(10);
+
+	DataStruct->C[5] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C5) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C5 + 1);
+	delay(10);
+
+	DataStruct->C[6] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C6) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C6 + 1);
+	delay(10);
+
+	DataStruct->C[7] = wiringPiI2CReadReg8(fd_MS,CMD_PROM_C7) << 8 | wiringPiI2CReadReg8(fd_MS,CMD_PROM_C7 + 1);
+	delay(10);
+}
+
+int MS5611_RequestPressure(int osr){
+	switch(osr){
+	case 256:
+		MS5611_tx =PRESSURE_OSR_256; // tc = 1 ms
+		break;
+	case 512:
+		MS5611_tx =PRESSURE_OSR_512; // tc = 2 ms
+		break;
+	case 1024:
+		MS5611_tx =PRESSURE_OSR_1024; // tc = 3 ms
+		break;
+	case 2048:
+		MS5611_tx =PRESSURE_OSR_2048; // tc = 5 ms
+		break;
+	case 4096:
+		MS5611_tx =PRESSURE_OSR_4096; // tc = 10 ms
+		break;
+	default:
+		return 1;
+		break;
+	}
+
+	wiringPiI2CWrite(fd_MS, MS5611_tx);
+	return 0;
+}
+
+int MS5611_RequestTemperature(int osr){
+	switch(osr){
+	case 256:
+		MS5611_tx =TEMP_OSR_256; // tc = 1 ms
+		break;
+	case 512:
+		MS5611_tx =TEMP_OSR_512; // tc = 2 ms
+		break;
+	case 1024:
+		MS5611_tx =TEMP_OSR_1024; // tc = 3 ms
+		break;
+	case 2048:
+		MS5611_tx =TEMP_OSR_2048; // tc = 5 ms
+		break;
+	case 4096:
+		MS5611_tx =TEMP_OSR_4096; // tc = 10 ms
+		break;
+	default:
+		return 1;
+		break;
+	}
+
+	wiringPiI2CWrite(fd_MS, MS5611_tx);
+	return 0;
+}
+
+int MS5611_ReadPressure(MS5611_t *DataStruct){
+	uint8_t buffer_P[3];
+	MS5611_tx = 0x00;
+	wiringPiI2CWrite(fd_MS, MS5611_tx);
+	read(fd_MS, buffer_P, 3);
+	DataStruct->DigitalPressure_D1 = (buffer_P[0] << 16) | (buffer_P[1] << 8) | buffer_P[2];
+	return 0;
+}
+
+int MS5611_ReadTemperature(MS5611_t *DataStruct){
+	uint8_t buffer_T[3];
+	MS5611_tx = 0x00;
+	wiringPiI2CWrite(fd_MS,MS5611_tx);
+	read(fd_MS, buffer_T, 3);
+	DataStruct->DigitalTemperature_D2 = (buffer_T[0] << 16) | (buffer_T[1] << 8) | buffer_T[2];
+	return 0;
+}
+
+int MS5611_CalculateTemperature(MS5611_t *DataStruct){
+	DataStruct->dT = DataStruct->C[5];
+	DataStruct->dT <<= 8; //Calculated up to C5 * 2^8
+	DataStruct->dT *= -1; //Apply negative sign
+	DataStruct->dT += DataStruct->DigitalTemperature_D2; // = D2 - C5 * 2^8
+
+	DataStruct->TEMP = DataStruct->dT * DataStruct->C[6] / pow(2,23);
+	DataStruct->TEMP += 2000;
+
+	if(DataStruct->TEMP>TMAX*100) DataStruct->TEMP = TMAX*100;
+	if(DataStruct->TEMP <TMIN*100) DataStruct->TEMP = TMIN*100;
+
+	return 0;
+}
+
+int MS5611_CalculatePressure(MS5611_t *DataStruct){
+	DataStruct->OFF = DataStruct->C[2];
+	DataStruct->OFF <<= 16; //Calculated up to C2 * 2^16
+	DataStruct->OFF += (DataStruct->C[4] * DataStruct->dT) / pow(2,7);
+
+
+	DataStruct->SENS = DataStruct->C[1];
+	DataStruct->SENS <<= 15; // Calculated up to C1 * 2^15
+	DataStruct->SENS += (DataStruct->C[3] * DataStruct->dT) / pow(2,8);
+
+	DataStruct->P = ((DataStruct->DigitalPressure_D1 * DataStruct->SENS) / pow(2,21) - DataStruct->OFF) / pow(2,15);
+	if(DataStruct->P>PMAX*100) DataStruct->P = PMAX*100;
+	if(DataStruct->P<PMIN*100) DataStruct->P = PMIN*100;
+
+	DataStruct-> alt = MS5611_getAltitude1(DataStruct->P/100);
+
+	return 0;
+}
+
+float MS5611_getAltitude1(float pressure){
+	return (44330.0f * (1.0f - powf(pressure / SEA_PRESSURE, 0.1902949f)));
+}
+
+
+
 
