@@ -212,7 +212,7 @@ int MS5611_CalculatePressure(MS5611_t *DataStruct);
 int MS5611_CalculateTemperature(MS5611_t *DataStruct);
 void print_MS5611(MS5611_t *data);
 void print_MPU6050(MPU6050_t *data);
-
+float MS5611_getAltitude1(float pressure);
 
 
 

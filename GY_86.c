@@ -540,6 +540,9 @@ int MS5611_CalculatePressure(MS5611_t *DataStruct){
 	return 0;
 }
 
+#define SEA_PRESSURE 1013.25f  // Standard atmospheric pressure in hPa (mbar)
+
+
 float MS5611_getAltitude1(float pressure){
 	return (44330.0f * (1.0f - powf(pressure / SEA_PRESSURE, 0.1902949f)));
 }
